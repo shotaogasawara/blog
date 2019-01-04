@@ -1,68 +1,189 @@
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+# このレポジトリについて
+reduxの勉強のために作成。コードは[Udemyのreduxコース](https://www.udemy.com/react-redux/learn/v4/t/lecture/12586846?start=68)を写経した成果物です。
 
-## Available Scripts
+学んだことの備忘録をあとで見返せるようにまとめておきます。
 
-In the project directory, you can run:
+# 環境構築について
+npx create-react-app blogで空のプロジェクトを作成
 
-### `npm start`
+必要なパッケージをインストール
+yarn add react-redux axios redux-thunk
 
-Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+src以下のファイル削除して順次必要なファイル群を生成。
 
-The page will reload if you make edits.<br>
-You will also see any lint errors in the console.
 
-### `npm test`
+# Reduxの基本
+1. ディレクトリ
+actions, components, reducers, containers, apis, constantsなど。
 
-Launches the test runner in the interactive watch mode.<br>
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+2. Reducer作成
+bookReducer.jsのように命名すると検索しやすい。functional componentを作成してexportする。
+reducers/index.jsなどでimportし、combineReducersの中に`books: BooksReducers`と記述することで、booksという名前の、アプリケーション全体からアクセス可能なstateが作られる。
 
-### `npm run build`
+3. Container作成
+まず、react-reduxからconnect関数をimportする。次に、通常のReactよろしくクラスコンポーネントを定義。mapStateToProps関数を下のように定義する。
 
-Builds the app for production to the `build` folder.<br>
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```js
+mapStateToProps(state) {
+  return {
+    asdf: '123',
+    books: state.books,
+  }
+}
+```
 
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
+ここでreturnされるオブジェクトはクラス内で`this.props.asdf`などとしてpropsからアクセス可能になる。引数のstateはreducerで定義したもの。
+最後に`export default connect(mapStateToProps)(BookList)`としてヒモ付が完了。
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+4. ComponentからのContainer呼び出し
+アプリケーション起動直後はstateにはnullが渡るので、`this.props.hoge`で拾った値がnullとなるため、`hoge.fuga`とするとエラーとなる。
+これを防ぐため、最初に`if(this.props.hoge) { return <div>loading</div>}`のようなロード中であることを示すdiv要素を返すようにするのがセオリー。
 
-### `npm run eject`
+5. Action Creator作成
+actions/index.jsなどにアクション用の関数を定義してexportする。戻り値は基本的にはtypeとpayloadをもつオブジェクト。関数を返したい場合などはredux-thunkを導入。この関数をaction-creatorと呼ぶ。返されるオブジェクトをaction（オブジェクト）と呼ぶ。
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+6. ActionとContainerをつなぐ
+actionを実行するcontainerからaction.jsをimportし、reduxのbindActionCreatorsもimportする。
+次に、以下のようにmapDispatchToProps関数を定義する。
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```js
+function mapDispatchToProps(dispatch) {
+  return bindActionCreators({ selectBook: selectBook }, dispatch)
+}
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (Webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+これにより、selectBookというアクションが呼ばれる度にreducerにその戻り値が渡される。
+bindActionCreators内のオブジェクトはpropsとしてcontainerに渡される。
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+connect関数の第2引数に`mapDispatchToProps`を追加することで紐づけは完了。
 
-## Learn More
+7. providerとstoreの準備
+エントリファイルとなるindex.jsなどで以下のようにstoreを作成し、reducerとのヒモ付を行う。また、middlewareとのヒモ付けを行う。
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```js
+import { Provider } from 'react-redux';
+import { createStore } from 'redux';
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+import App from './components/app';
+import reducers from './reducers';
 
-### Code Splitting
+const store = createStore(reducers);
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/code-splitting
+ReactDOM.render(
+  <Provider store={store} >
+    <App />
+  </Provider>
+  , document.querySelector('.container'));
+```
 
-### Analyzing the Bundle Size
+上記までで基本的なreact-reduxの実装はできそう。
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size
 
-### Making a Progressive Web App
+# APIの実装
+次はAPIの実装についてメモ。react/reduxでAPI叩きたい場合は面倒なことにredux-thunkを使う必要がある。（正確にはmiddlewareが必要。)
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app
+## 手順
+reduxのアクションでrequestを発行する場合はredux-thunkが必要なので予めインストールする。
 
-### Advanced Configuration
+まず、typeを持つオブジェクトを返すaction creatorを作成する。
+データをロードしたいコンポーネントで読み込み、componentDidMount時に`this.props.fetchPosts()`のように呼び出す。
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/advanced-configuration
+propsで呼び出せるように、connectメソッドをreact-reduxから読み込んでおき、ファイルの最後に`export default connect(null, {fetchPosts})(PostList);`のように記述する。stateをmapしない場合はconnectの第一引数にnullを指定する。また、第2引数はes6の文法で{fetchPosts: fetchPosts}の省略形で記述できる。
 
-### Deployment
+次に、actionをredux-thunkを使って非同期化する。具体的にはdispatchとgetState関数を引数に持つ関数を返すようにactionを書き換える。こうすることで、APIリクエストが終わるまでdispatch実行を待機してくれる(らしい)。
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/deployment
+なお、apiの処理はapisフォルダなどを作成してそちらに分けるのがわかり良さそう。
 
-### `npm run build` fails to minify
+アクションの非同期化の例は以下の通り。アロー関数使ってきれいにまとめてある。
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify
+```js
+import jsonPlaceholder from '../apis/jsonPlaceholder'
+
+export const fetchPosts = () => async dispatch => {
+  const response = await jsonPlaceholder.get('/posts')
+
+  dispatch({
+    type: 'FETCH_POSTS',
+    payload: response,
+  })
+};
+```
+
+なお、thunkを使うにはストア作成時にthunkを組み込むようにする。
+
+```js
+import React from 'react';
+import ReactDOM from 'react-dom';
+import { Provider } from 'react-redux';
+import {
+  createStore,
+  applyMiddleware
+} from 'redux';
+import thunk from 'redux-thunk';
+
+import App from './components/App';
+import reducers from './reducers';
+
+const store = createStore(reducers, applyMiddleware(thunk));
+
+ReactDOM.render(
+  <Provider store={store}>
+    <App />
+  </Provider>
+  , document.querySelector('#root'));
+```
+
+
+# Reducerの基本ルール
+1. undfined以外を返すようにする
+2. reducerは直近のstateとアクションに基づいて次のstateやデータを作成する。
+
+一度目の呼び出しでstateにはundefinedが入っている。が、このままではreducer側でエラーとなる恐れがあるのでデフォルト値にnullを入れるようにする。
+Reducerが2回目移行に呼ばれると直前のstateが渡される。
+
+3. reducerの中でAPIリクエストや新しくデータを取得する処理を呼んではならない。
+->あくまで引数となるstateとアクションに基づく「処理」のみ許容すること。
+->pure reducerと呼ぶっぽい。
+
+4. 引数として渡すstateに変更を加えてはならない。
+->javascriptではarrayやobjectは簡単に変更できてしまうので注意が必要。
+（一方でstringや数値はimmutable）
+
+
+# その他のメモ
+## dumbコンポーネント
+reduxにアクセスしないコンポーネントのこと。逆に、reduxからデータを受け取るコンポーネントはcontainerと呼んで区別することが多い。ディレクトリを分ける場合はcomponentsとcontainersのように切れば良さそう。
+
+## ReactとReduxの関係
+ReactとReduxは異なる別々のライブラリ。これらをつないで使いたい場合はreact-reduxが必要。
+
+## アクションの伝搬
+アクションは全reducerに送られる。
+
+## Reducerについて
+
+undefinedのstateをactionで返すことはできないのでdefaultでstate=nullとする。
+```js
+export const activeBookReducer = (state = null, action) => {
+  switch(action.type){
+  case 'BOOK_SELECTED':
+    return action.payload
+  }
+
+  return state
+}
+```
+
+モジュールのimport/exportは{}をつける/つけないの基準がわかりにくい。そのため、予め統一させておいたほうが楽ができそう。
+基本的には`const hoge = ...`と定義して、`export default hoge`とexportして、`import hoge from '../hoge'`などと{}なしに統一するとかで良いのでは？
+
+なお、connectやrootReducerは
+`export default rootReducer`としてexportしないとエラーが出たりするので注意。
+
+## middlewareについて
+middlewareはdispatchの直前に実行される。
+
+
+## JsonPlaceholderについて
+REST APIの実験をするのに使える外部APIサービス
+https://jsonplaceholder.typicode.com/
